@@ -62,3 +62,28 @@ variable "desired_count" {
   description = "Número de réplicas de contenedores corriendo simultáneamente"
   default     = 1
 }
+
+variable "database_host" {
+  type        = string
+  description = "Host de la base de datos RDS"
+}
+
+variable "database_password" {
+  type        = string
+  description = "Password de la base de datos RDS"
+}
+
+variable "media_bucket_name" {
+  type        = string
+  description = "Nombre del bucket S3 de assets"
+}
+
+variable "jwt_secret" {
+  type = string
+  sensitive = true
+}
+
+variable "google_client_id" {
+  type = string 
+  sensitive = true 
+}

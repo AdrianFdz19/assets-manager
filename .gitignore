@@ -16,3 +16,5 @@ credenciales.txt
 
 # Evitar archivos de variables de entorno locales de Terraform
 .terraform.lock.hcl
+
+database.sql

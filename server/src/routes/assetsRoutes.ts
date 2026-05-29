@@ -1,12 +1,15 @@
+// Assets Routes - assetsRoutes.ts
 import { NextFunction, Request, Response, Router } from 'express'
 import { pool } from '../config/databaseConfig';
 import { isAuth } from '../middleware/isAuth';
-import cloudinary from '../config/cloudinary';
-import upload from '../services/multer';
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import upload, { s3 } from '../services/multer';
+import { envs } from '../config/envs';
+import { globalLimiter, strictLimiter } from '../middleware/rateLimiter';
 
 export const assets = Router();
 
-assets.get('/', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.get('/', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { search, categoryId, status, userId, page = 1, limit = 8 } = req.query;
         console.log(req.query);
@@ -74,7 +77,7 @@ assets.get('/', isAuth, async (req: Request, res: Response, next: NextFunction) 
     }
 });
 
-assets.post('/', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.post('/', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const {
             name,
@@ -128,7 +131,7 @@ assets.post('/', isAuth, async (req: Request, res: Response, next: NextFunction)
 });
 
 // Usamos /:id para que sea una ruta RESTful clara
-assets.put('/:id', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.put('/:id', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params; // El ID viene de la URL
         const {
@@ -189,37 +192,45 @@ assets.put('/:id', isAuth, async (req: Request, res: Response, next: NextFunctio
     }
 });
 
-assets.delete('/:id', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.delete('/:id', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
     try {
-        // 1. Primero buscamos el asset para obtener el image_public_id
-        const findQuery = `SELECT image_public_id FROM assets WHERE id = $1`;
+        // 1. Primero buscamos el asset para obtener la Key única de S3 (antes image_public_id)
+        // Nota: Asegúrate de que tu columna guarde la KEY (ej: 'assets/17169420-foto.jpg') o la extraigas de la URL
+        const findQuery = `SELECT image_public_id FROM assets WHERE id = $1`; 
         const findResult = await pool.query(findQuery, [id]);
 
         if (findResult.rowCount === 0) {
             return res.status(404).json({ message: 'Asset not found.' });
         }
 
-        const publicId = findResult.rows[0].image_public_id;
+        const s3Key = findResult.rows[0].image_public_id; // Aquí vive el identificador del archivo
 
-        // 2. Borramos el registro de la base de datos
+        // 2. Borramos el registro de la base de datos primero (Estrategia de resiliencia intacta)
         const deleteQuery = `DELETE FROM assets WHERE id = $1`;
         await pool.query(deleteQuery, [id]);
 
-        // 3. Si tiene una imagen en Cloudinary, la borramos
-        // Hacemos esto DESPUÉS de borrar de la DB para asegurar que si falla la DB, no perdamos la imagen
-        if (publicId) {
+        // 3. Si tiene un archivo en AWS S3, lo eliminamos usando el SDK v3
+        if (s3Key) {
             try {
-                await cloudinary.uploader.destroy(publicId);
-            } catch (cloudErr) {
-                // Logueamos el error pero no bloqueamos la respuesta al usuario
-                console.error("Cloudinary Delete Error:", cloudErr);
+                const deleteParams = {
+                    Bucket: envs.AWS_S3_BUCKET_NAME || '',
+                    Key: s3Key // Ejemplo: "assets/1684920492-imagen.png"
+                };
+
+                // Lanzamos la petición de destrucción directa a los servidores de Amazon S3
+                await s3.send(new DeleteObjectCommand(deleteParams));
+                console.log(`🗑️ Objeto S3 eliminado con éxito: ${s3Key}`);
+                
+            } catch (s3Err) {
+                // Logueamos el error de AWS pero no bloqueamos la respuesta HTTP al cliente
+                console.error("AWS S3 Delete Object Error:", s3Err);
             }
         }
 
         res.status(200).json({
-            message: 'Asset and associated media deleted successfully.'
+            message: 'Asset and associated cloud media deleted successfully.'
         });
 
     } catch (err) {
@@ -227,7 +238,7 @@ assets.delete('/:id', isAuth, async (req: Request, res: Response, next: NextFunc
     }
 });
 
-assets.get('/dashboard-stats', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.get('/dashboard-stats', globalLimiter, isAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const query = `
             SELECT
@@ -282,36 +293,34 @@ assets.get('/dashboard-stats', isAuth, async (req: Request, res: Response, next:
     }
 });
 
-assets.post('/upload', upload.single('image'), async (req: Request, res: Response) => {
+// 🛡️ Creamos una interfaz extendida para que TypeScript reconozca las propiedades que inyecta MulterS3
+interface MulterS3File extends Express.Multer.File {
+    location: string;
+    key: string;
+    bucket: string;
+}
+
+assets.post('/upload', isAuth, strictLimiter, upload.single('image'), async (req: Request, res: Response) => {
     try {
         // 1. Verificación de seguridad (Type Guard)
-        // Gracias al declare global, TS ya sabe que req.file existe
         if (!req.file) {
             return res.status(400).json({ message: "No se proporcionó imagen" });
         }
 
-        // 2. Convertir el buffer a Base64
-        // req.file.buffer contiene los datos binarios en RAM
-        const fileBase64 = req.file.buffer.toString('base64');
+        // 2. Casteamos req.file con nuestra interfaz para tener autocompletado y tipado estricto de AWS
+        const s3File = req.file as MulterS3File;
 
-        // CORRECCIÓN: El mimetype sale de req.file, no de la variable fileBase64
-        const dataUri = `data:${req.file.mimetype};base64,${fileBase64}`;
-
-        // 3. Subir a Cloudinary
-        const result = await cloudinary.uploader.upload(dataUri, {
-            folder: 'assets-manager',
-            transformation: [{ width: 500, height: 500, crop: 'limit' }]
-        });
-
-        // 4. Respuesta al Frontend
+        // 3. Respuesta al Frontend
+        // Mantenemos EXACTAMENTE el mismo contrato de llaves que tenías con Cloudinary (url y public_id)
+        // para que tu RTK Query en el frontend no rompa nada.
         res.status(200).json({
             success: true,
-            url: result.secure_url, // Esta es la URL que guardarás en Postgres
-            public_id: result.public_id
+            url: s3File.location, // La URL pública de Amazon S3 que se guardará en tu Postgres
+            public_id: s3File.key // El identificador único del objeto (la ruta interna del bucket)
         });
 
     } catch (error) {
-        console.error("Cloudinary Error:", error);
+        console.error("AWS S3 Upload Error:", error);
         res.status(500).json({
             success: false,
             message: "Error al subir la imagen a la nube"

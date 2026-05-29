@@ -1,9 +1,10 @@
 import { NextFunction, Request, Response, Router } from 'express'
 import { pool } from '../config/databaseConfig';
+import { globalLimiter } from '../middleware/rateLimiter';
 
 export const users = Router();
 
-users.get('/', async (req: Request, res: Response, next: NextFunction) => {
+users.get('/', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const query = `SELECT id, username as name, email, role, avatar FROM users`;
         const response = await pool.query(query);

@@ -1,9 +1,10 @@
 import { NextFunction, Request, Response, Router } from 'express'
 import { pool } from '../config/databaseConfig';
+import { globalLimiter } from '../middleware/rateLimiter';
 
 export const categories = Router();
 
-categories.get('/', async (req: Request, res: Response, next: NextFunction) => {
+categories.get('/', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const query = `SELECT * FROM categories`;
         const response = await pool.query(query);
@@ -19,7 +20,7 @@ categories.get('/', async (req: Request, res: Response, next: NextFunction) => {
     }
 });
 
-categories.post('/', async (req: Request, res: Response, next: NextFunction) => {
+categories.post('/', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { name } = req.body; // Por el momento solo el nombre de la categoria
 
@@ -44,7 +45,7 @@ categories.post('/', async (req: Request, res: Response, next: NextFunction) => 
     }
 });
 
-categories.put('/:categoryId', async (req: Request, res: Response, next: NextFunction) => {
+categories.put('/:categoryId', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const categoryId = Number(req.params.categoryId);
         const { name } = req.body; 
@@ -82,7 +83,7 @@ categories.put('/:categoryId', async (req: Request, res: Response, next: NextFun
     }
 });
 
-categories.delete('/:categoryId', async (req: Request, res: Response, next: NextFunction) => {
+categories.delete('/:categoryId', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     // 1. Iniciamos una transacción para asegurar integridad
     const client = await pool.connect();
     

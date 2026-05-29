@@ -48,10 +48,18 @@ module "compute" {
   vpc_id                     = module.networking.vpc_id
   public_subnet_ids          = module.networking.public_subnet_ids
   private_compute_subnet_ids = module.networking.private_compute_subnet_ids
+
+  jwt_secret = "secret"
+  google_client_id = "870653784456-3ilp2gjt8vjd2u8pd9fjq0afr4sc85pr.apps.googleusercontent.com"
+
+  # 🌟 Pasamos la interconexión de módulos
+  database_host     = module.storage.db_address
+  database_password = "AssetFlowSecurePass2026"
+  media_bucket_name = module.storage.s3_bucket_name
   
   # Tu imagen de Docker (puedes cambiarla después por tu URI de ECR)
-  container_image            = "node:20-alpine" 
-  container_port             = 5000
+  container_image            = "031949581603.dkr.ecr.us-east-1.amazonaws.com/assetflow-development-backend:latest" 
+  container_port             = 3000
   fargate_cpu                = "256"
   fargate_memory             = "512"
   desired_count              = 1
