@@ -1,0 +1,18 @@
+client_secret.json 
+credenciales.txt 
+
+# Evitar subir los binarios y directorios de trabajo de Terraform
+.terraform/
+*.executable
+
+# Evitar subir archivos de estado locales (el tuyo ya está seguro en S3, pero por si acaso)
+*.tfstate
+*.tfstate.*
+
+# ¡CRUCIAL! Evitar subir archivos de variables que tengan contraseñas o llaves secretas
+*.tfvars
+*.tfvars.json
+*.passwd
+
+# Evitar archivos de variables de entorno locales de Terraform
+.terraform.lock.hcl
