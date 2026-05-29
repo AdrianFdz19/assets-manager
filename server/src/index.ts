@@ -7,15 +7,18 @@ import { auth as authRoute } from './routes/authRoutes';
 import cookieParser from 'cookie-parser';
 import { users } from './routes/usersRoutes';
 import { pool } from './config/databaseConfig';
+import { envs } from './config/envs';
 
 const app: Application = express();
+
+app.set('trust proxy', 1);
  
 const PORT: number = parseInt(process.env.PORT || '4000', 10);
 
 // Midlewares
 
 app.use(cors({
-  origin: 'https://feature-migration-to-aws.dw69k3m3yca8o.amplifyapp.com',
+  origin: envs.CLIENT_URL,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']

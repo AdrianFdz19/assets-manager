@@ -142,7 +142,7 @@ resource "aws_ecs_task_definition" "app" {
         { name = "DATABASE_NAME", value = "assetflow_dev_db" },
         { name = "JWT_SECRET", value = var.jwt_secret },
         { name = "GOOGLE_CLIENT_ID", value = var.google_client_id },
-        { name = "CLIENT_URL", value = "http://localhost:5173" },
+        { name = "CLIENT_URL", value = "https://feature-migration-to-aws.dw69k3m3yca8o.amplifyapp.com" },
 
         # 🔗 Estas variables se alimentarán desde las variables de entrada de tu módulo
         { name = "DATABASE_HOST", value = var.database_host },

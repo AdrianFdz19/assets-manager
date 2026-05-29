@@ -5,6 +5,7 @@ import { envs } from '../config/envs';
 import jwt from 'jsonwebtoken'
 import { isAuth } from '../middleware/isAuth';
 import bcrypt from 'bcryptjs'
+import { strictLimiter } from '../middleware/rateLimiter';
 const client = new OAuth2Client(envs.GOOGLE_CLIENT_ID);
 
 export const auth = Router();
@@ -74,7 +75,7 @@ export const sendTokenCookie = (res: Response, userId: number) => {
 };
 
 // SignUp
-auth.post('/signup', async (req: Request, res: Response, next: NextFunction) => {
+auth.post('/signup', strictLimiter, async (req: Request, res: Response, next: NextFunction) => {
     const { name, email, password } = req.body;
 
     // 1. Validación temprana
@@ -125,7 +126,7 @@ auth.post('/signup', async (req: Request, res: Response, next: NextFunction) => 
 });
 
 // Sign In
-auth.post('/signin', async (req: Request, res: Response, next: NextFunction) => {
+auth.post('/signin', strictLimiter, async (req: Request, res: Response, next: NextFunction) => {
     const { username, password } = req.body; // 'username' puede ser el email o el nickname
 
     if (!username || !password) {
@@ -180,7 +181,7 @@ auth.post('/signin', async (req: Request, res: Response, next: NextFunction) => 
     }
 });
 
-auth.post('/google', async (req: Request, res: Response, next: NextFunction) => {
+auth.post('/google', strictLimiter, async (req: Request, res: Response, next: NextFunction) => {
     const { token } = req.body;
     const tokenString = typeof token === 'string' ? token : token.token;
     console.log(tokenString);
@@ -231,7 +232,7 @@ auth.post('/google', async (req: Request, res: Response, next: NextFunction) => 
 });
 
 // Logout
-auth.post('/logout', isAuth, (req: Request, res: Response) => {
+auth.post('/logout', strictLimiter, isAuth, (req: Request, res: Response) => {
     // Es buena práctica usar las mismas opciones que en el login
     const cookieOptions = {
         httpOnly: true,

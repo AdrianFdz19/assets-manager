@@ -5,10 +5,11 @@ import { isAuth } from '../middleware/isAuth';
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import upload, { s3 } from '../services/multer';
 import { envs } from '../config/envs';
+import { globalLimiter, strictLimiter } from '../middleware/rateLimiter';
 
 export const assets = Router();
 
-assets.get('/', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.get('/', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { search, categoryId, status, userId, page = 1, limit = 8 } = req.query;
         console.log(req.query);
@@ -76,7 +77,7 @@ assets.get('/', isAuth, async (req: Request, res: Response, next: NextFunction) 
     }
 });
 
-assets.post('/', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.post('/', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const {
             name,
@@ -130,7 +131,7 @@ assets.post('/', isAuth, async (req: Request, res: Response, next: NextFunction)
 });
 
 // Usamos /:id para que sea una ruta RESTful clara
-assets.put('/:id', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.put('/:id', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params; // El ID viene de la URL
         const {
@@ -191,7 +192,7 @@ assets.put('/:id', isAuth, async (req: Request, res: Response, next: NextFunctio
     }
 });
 
-assets.delete('/:id', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.delete('/:id', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     const { id } = req.params;
 
     try {
@@ -237,7 +238,7 @@ assets.delete('/:id', isAuth, async (req: Request, res: Response, next: NextFunc
     }
 });
 
-assets.get('/dashboard-stats', isAuth, async (req: Request, res: Response, next: NextFunction) => {
+assets.get('/dashboard-stats', globalLimiter, isAuth, async (req: Request, res: Response, next: NextFunction) => {
     try {
         const query = `
             SELECT
@@ -299,7 +300,7 @@ interface MulterS3File extends Express.Multer.File {
     bucket: string;
 }
 
-assets.post('/upload', upload.single('image'), async (req: Request, res: Response) => {
+assets.post('/upload', isAuth, strictLimiter, upload.single('image'), async (req: Request, res: Response) => {
     try {
         // 1. Verificación de seguridad (Type Guard)
         if (!req.file) {
