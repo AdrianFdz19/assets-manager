@@ -1,3 +1,4 @@
+// Assets Routes - assetsRoutes.ts
 import { NextFunction, Request, Response, Router } from 'express'
 import { pool } from '../config/databaseConfig';
 import { isAuth } from '../middleware/isAuth';

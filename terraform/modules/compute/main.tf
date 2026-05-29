@@ -11,6 +11,13 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"] # Cualquier persona en el mundo puede entrar por HTTP
   }
 
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -59,7 +66,7 @@ resource "aws_lb_target_group" "app" {
 
   # Monitoreo de salud para saber si Node.js colapsa o sigue vivo
   health_check {
-    path                = "/health" # Asegurate de tener un endpoint app.get('/health') en tu Express
+    path                = "/ping" # Asegurate de tener un endpoint app.get('/health') en tu Express
     healthy_threshold   = 3
     unhealthy_threshold = 3
     timeout             = 5
@@ -69,14 +76,34 @@ resource "aws_lb_target_group" "app" {
 }
 
 # 5. El Oyente (Listener) que mapea el puerto 80 al Target Group
-resource "aws_lb_listener" "http" {
+resource "aws_lb_listener" "backend_https" {
+  load_balancer_arn = aws_lb.main.arn # Asegúrate de que coincida con el nombre de tu recurso aws_lb
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08" # La política estándar de AWS
+  
+  # 🌟 PEGA AQUÍ TU ARN DE ACM COPIADO (O pásalo mediante una variable)
+  certificate_arn   = "arn:aws:acm:us-east-1:031949581603:certificate/53ddb105-5eb6-42f1-a239-7304ebe888c3"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn # El target group que apunta a tu Fargate en el puerto 3000
+  }
+}
+
+resource "aws_lb_listener" "backend_http" {
   load_balancer_arn = aws_lb.main.arn
   port              = "80"
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.app.arn
+    type = "redirect"
+
+    redirect {
+      port        = "443" # Redirige al puerto seguro
+      protocol    = "HTTPS"
+      status_code = "HTTP_301" # Redirección permanente
+    }
   }
 }
 
@@ -88,7 +115,7 @@ resource "aws_ecs_cluster" "main" {
 # 7. Task Definition (La plantilla de ejecucion del contenedor)
 resource "aws_ecs_task_definition" "app" {
   family                   = "assetflow-${var.environment}-task"
-  network_mode             = "awsvpc" 
+  network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.fargate_cpu
   memory                   = var.fargate_memory
@@ -106,24 +133,24 @@ resource "aws_ecs_task_definition" "app" {
           hostPort      = var.container_port
         }
       ]
-      
+
       # 🚀 INYECCIÓN DE VARIABLES DE ENTORNO EN TIEMPO DE EJECUCIÓN
       environment = [
-        { name = "NODE_ENV",          value = "production" },
-        { name = "PORT",              value = tostring(var.container_port) },
-        { name = "DATABASE_USER",     value = "postgres" },
-        { name = "DATABASE_NAME",     value = "assetflow_dev_db" },
-        { name = "JWT_SECRET",     value = var.jwt_secret },
-        { name = "GOOGLE_CLIENT_ID",     value = var.google_client_id },
-        { name = "CLIENT_URL",     value = "http://localhost:5173" },
-        
+        { name = "NODE_ENV", value = "production" },
+        { name = "PORT", value = tostring(var.container_port) },
+        { name = "DATABASE_USER", value = "postgres" },
+        { name = "DATABASE_NAME", value = "assetflow_dev_db" },
+        { name = "JWT_SECRET", value = var.jwt_secret },
+        { name = "GOOGLE_CLIENT_ID", value = var.google_client_id },
+        { name = "CLIENT_URL", value = "http://localhost:5173" },
+
         # 🔗 Estas variables se alimentarán desde las variables de entrada de tu módulo
-        { name = "DATABASE_HOST",     value = var.database_host },
+        { name = "DATABASE_HOST", value = var.database_host },
         { name = "DATABASE_PASSWORD", value = var.database_password },
-        { name = "AWS_S3_BUCKET_NAME",value = var.media_bucket_name }
+        { name = "AWS_S3_BUCKET_NAME", value = var.media_bucket_name }
       ]
 
-      logConfiguration = { 
+      logConfiguration = {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
@@ -156,13 +183,15 @@ resource "aws_ecs_service" "main" {
   }
 
   # Le dice a ECS que espere a que el ALB cree el Listener antes de intentar colgar tareas
-  depends_on = [aws_lb_listener.http]
+  depends_on = [aws_lb_listener.backend_https]
 }
 
 # El repositorio donde vas a subir tus imagenes Docker de Node.js
 resource "aws_ecr_repository" "app" {
   name                 = "assetflow-${var.environment}-backend"
   image_tag_mutability = "MUTABLE"
+
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true # Escanea tu codigo en busca de vulnerabilidades de seguridad
@@ -206,8 +235,8 @@ resource "aws_iam_policy" "ecs_s3_access" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
-        Action   = [
+        Effect = "Allow"
+        Action = [
           "s3:PutObject",
           "s3:GetObject",
           "s3:ListBucket"

@@ -97,10 +97,10 @@ auth.post('/signup', async (req: Request, res: Response, next: NextFunction) => 
 
         // 5. Insertar usuario (Usando username como columna según tu esquema)
         const userQuery = await pool.query(
-            `INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id, username, email, avatar`, 
-            [name, email, hashedPassword]
+            `INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, username, email, avatar`,
+            [name, email, hashedPassword, 'USER']
         );
-        
+
         const userData = userQuery.rows[0];
 
         // 6. Generar sesión inmediata
@@ -135,10 +135,10 @@ auth.post('/signin', async (req: Request, res: Response, next: NextFunction) => 
     try {
         // 1. Buscamos al usuario
         const result = await pool.query(
-            `SELECT id, username, email, password, avatar FROM users WHERE email = $1 OR username = $1`, 
+            `SELECT id, username, email, password, avatar FROM users WHERE email = $1 OR username = $1`,
             [username]
         );
-        
+
         const user = result.rows[0];
 
         // 2. Verificación: ¿Existe el usuario?
@@ -242,7 +242,7 @@ auth.post('/logout', isAuth, (req: Request, res: Response) => {
     };
 
     res.clearCookie('session_token', cookieOptions);
-    
+
     // Opcional: Forzar la expiración manualmente por si clearCookie falla
     /* res.cookie('session_token', '', { ...cookieOptions, expires: new Date(0) }); */
 
