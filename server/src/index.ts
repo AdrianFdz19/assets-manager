@@ -13,7 +13,7 @@ const PORT: number = parseInt(process.env.PORT || '4000', 10);
 
 // Midlewares
 
-const whiteList = ['http://localhost:5173', 'https://assets-system-manager-app.netlify.app'];
+const whiteList = ['http://localhost:5173', 'https://assets-system-manager-app.netlify.app', 'https://feature-migration-to-aws.dw69k3m3yca8o.amplifyapp.com'];
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -30,8 +30,6 @@ app.use(cors({
 app.use((req, res, next) => {
   // Esto le dice al navegador: "Confío en los popups que yo mismo abro"
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-  // Opcionalmente, puedes añadir este para mayor compatibilidad con Google GSI
-  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp"); 
   next();
 });
 
