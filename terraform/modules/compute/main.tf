@@ -88,11 +88,12 @@ resource "aws_ecs_cluster" "main" {
 # 7. Task Definition (La plantilla de ejecucion del contenedor)
 resource "aws_ecs_task_definition" "app" {
   family                   = "assetflow-${var.environment}-task"
-  network_mode             = "awsvpc" # Requerido por Fargate
+  network_mode             = "awsvpc" 
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.fargate_cpu
   memory                   = var.fargate_memory
   execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  task_role_arn            = aws_iam_role.ecs_execution_role.arn # 🌟 Agregamos esto para que la app tenga permisos de hablar con S3
 
   container_definitions = jsonencode([
     {
@@ -105,7 +106,24 @@ resource "aws_ecs_task_definition" "app" {
           hostPort      = var.container_port
         }
       ]
-      logConfiguration = { # <-- ¡ACTIVAMOS LOS LOGS AQUÍ!
+      
+      # 🚀 INYECCIÓN DE VARIABLES DE ENTORNO EN TIEMPO DE EJECUCIÓN
+      environment = [
+        { name = "NODE_ENV",          value = "production" },
+        { name = "PORT",              value = tostring(var.container_port) },
+        { name = "DATABASE_USER",     value = "postgres" },
+        { name = "DATABASE_NAME",     value = "assetflow_dev_db" },
+        { name = "JWT_SECRET",     value = var.jwt_secret },
+        { name = "GOOGLE_CLIENT_ID",     value = var.google_client_id },
+        { name = "CLIENT_URL",     value = "http://localhost:5173" },
+        
+        # 🔗 Estas variables se alimentarán desde las variables de entrada de tu módulo
+        { name = "DATABASE_HOST",     value = var.database_host },
+        { name = "DATABASE_PASSWORD", value = var.database_password },
+        { name = "AWS_S3_BUCKET_NAME",value = var.media_bucket_name }
+      ]
+
+      logConfiguration = { 
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
@@ -126,9 +144,9 @@ resource "aws_ecs_service" "main" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = var.private_compute_subnet_ids # <-- Nace protegido en la privada
+    subnets          = var.public_subnet_ids
     security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = false # No necesita IP publica, el ALB se encarga de comunicarlo
+    assign_public_ip = true
   }
 
   load_balancer {
@@ -177,4 +195,34 @@ resource "aws_iam_role_policy_attachment" "ecs_execution" {
 resource "aws_cloudwatch_log_group" "ecs" {
   name              = "/ecs/assetflow-${var.environment}-backend"
   retention_in_days = 7 # Guarda los logs por una semana para no generar costos extras
+}
+
+# Política personalizada para que Express acceda a S3 desde adentro de Fargate
+resource "aws_iam_policy" "ecs_s3_access" {
+  name        = "assetflow-${var.environment}-ecs-s3-policy"
+  description = "Permite a las tareas de ECS subir y leer archivos en S3"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.media_bucket_name}",
+          "arn:aws:s3:::${var.media_bucket_name}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# Adjuntamos la política de S3 al rol de ejecución
+resource "aws_iam_role_policy_attachment" "ecs_s3_attach" {
+  role       = aws_iam_role.ecs_execution_role.name
+  policy_arn = aws_iam_policy.ecs_s3_access.arn
 }

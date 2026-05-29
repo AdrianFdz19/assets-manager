@@ -17,8 +17,8 @@ COPY . .
 RUN npm run build
 
 # 7. Variable de entorno para el puerto
-ENV PORT=10000
-EXPOSE 10000
+ENV PORT=3000
+EXPOSE 3000
 
 # 8. Comando de arranque
 # Usamos el script "start" de tu package.json
