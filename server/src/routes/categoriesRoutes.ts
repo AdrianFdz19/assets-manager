@@ -1,77 +1,110 @@
-import { NextFunction, Request, Response, Router } from 'express'
+import { NextFunction, Request, Response, Router } from 'express';
 import { pool } from '../config/databaseConfig';
 import { globalLimiter } from '../middleware/rateLimiter';
+import { isAuth } from '../middleware/isAuth'; // 🔒 Importación obligatoria
 
 export const categories = Router();
 
-categories.get('/', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
+// --- 1. GET ALL CATEGORIES ---
+categories.get('/', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const query = `SELECT * FROM categories`;
-        const response = await pool.query(query);
+        const organizationId = req.organizationId;
+
+        if (!organizationId) {
+            return res.status(403).json({ message: 'Acceso denegado. No se identificó un Workspace válido.' });
+        }
+
+        // 🔒 Filtramos para que solo traiga las categorías de ESTA empresa
+        const query = `SELECT * FROM categories WHERE organization_id = $1 ORDER BY name ASC`;
+        const response = await pool.query(query, [organizationId]);
         const data = response.rows;
 
-        res.status(200)
-            .json({
-                message: '',
-                data
-            });
+        res.status(200).json({
+            message: '',
+            data
+        });
     } catch (err) {
         next(err);
     }
 });
 
-categories.post('/', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
+// --- 2. CREATE CATEGORY ---
+categories.post('/', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { name } = req.body; // Por el momento solo el nombre de la categoria
+        const organizationId = req.organizationId;
 
-        // Verificar si el nombre ya existe en la base de datos
+        if (!organizationId) {
+            return res.status(403).json({ message: 'Acceso denegado. No se identificó un Workspace válido.' });
+        }
 
-        const query = `SELECT name FROM categories WHERE name = $1`;
-        const verifyNameResponse = await pool.query(query, [name]);
-        const alreadyCategoryNameExists = verifyNameResponse.rows[0];
+        const { name } = req.body;
 
-        if (alreadyCategoryNameExists) return res.status(400).json({ message: 'This category name already exists. try with another one.' });
+        if (!name || name.trim() === '') {
+            return res.status(400).json({ message: 'El nombre de la categoría es obligatorio.' });
+        }
 
-        const response = await pool.query(`INSERT INTO categories ( name ) VALUES ( $1 ) RETURNING *`, [name]);
-        const newCategory = response.rows[0];
-
-        res.status(200)
-            .json({
-                message: '',
-                data: newCategory
-            });
-    } catch (err) {
-        next(err);
-    }
-});
-
-categories.put('/:categoryId', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const categoryId = Number(req.params.categoryId);
-        const { name } = req.body; 
-
-        // 1. Verificar si el nombre ya existe en OTRA categoría (excluyendo la actual)
-        const checkQuery = `SELECT id FROM categories WHERE name = $1 AND id != $2`;
-        const checkRes = await pool.query(checkQuery, [name, categoryId]);
-
-        if (checkRes.rows.length > 0) {
+        // 🔒 Verificar si el nombre ya existe DENTRO de la misma organización
+        const checkQuery = `SELECT name FROM categories WHERE name = $1 AND organization_id = $2`;
+        const verifyNameResponse = await pool.query(checkQuery, [name.trim(), organizationId]);
+        
+        if (verifyNameResponse.rowCount > 0) {
             return res.status(400).json({ message: 'This category name already exists. Try with another one.' });
         }
 
-        // 2. UPDATE con WHERE y RETURNING
+        // 🔒 Inserción atómica inyectando el organization_id
+        const insertQuery = `
+            INSERT INTO categories (name, organization_id) 
+            VALUES ($1, $2) 
+            RETURNING *
+        `;
+        const response = await pool.query(insertQuery, [name.trim(), organizationId]);
+        const newCategory = response.rows[0];
+
+        res.status(201).json({ // 201 Semántica de creación HTTP
+            message: 'Categoría creada con éxito',
+            data: newCategory
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// --- 3. UPDATE CATEGORY ---
+categories.put('/:categoryId', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const organizationId = req.organizationId;
+
+        if (!organizationId) {
+            return res.status(403).json({ message: 'Acceso denegado. No se identificó un Workspace válido.' });
+        }
+
+        const categoryId = Number(req.params.categoryId);
+        const { name } = req.body;
+
+        if (!name || name.trim() === '') {
+            return res.status(400).json({ message: 'El nombre de la categoría es obligatorio.' });
+        }
+
+        // 1. 🔒 Verificar duplicados en OTRA categoría, pero restringido al mismo Workspace
+        const checkQuery = `SELECT id FROM categories WHERE name = $1 AND id != $2 AND organization_id = $3`;
+        const checkRes = await pool.query(checkQuery, [name.trim(), categoryId, organizationId]);
+
+        if (checkRes.rowCount > 0) {
+            return res.status(400).json({ message: 'This category name already exists. Try with another one.' });
+        }
+
+        // 2. 🔒 UPDATE asegurando el aislamiento
         const updateQuery = `
             UPDATE categories 
             SET name = $1 
-            WHERE id = $2 
+            WHERE id = $2 AND organization_id = $3 
             RETURNING id, name
         `;
-        const response = await pool.query(updateQuery, [name, categoryId]);
-        
+        const response = await pool.query(updateQuery, [name.trim(), categoryId, organizationId]);
         const categoryUpdated = response.rows[0];
 
-        // 3. Manejar si el ID no existía
         if (!categoryUpdated) {
-            return res.status(404).json({ message: 'Category not found.' });
+            return res.status(404).json({ message: 'Category not found in this Workspace.' });
         }
 
         res.status(200).json({
@@ -83,34 +116,42 @@ categories.put('/:categoryId', globalLimiter, async (req: Request, res: Response
     }
 });
 
-categories.delete('/:categoryId', globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
-    // 1. Iniciamos una transacción para asegurar integridad
+// --- 4. DELETE CATEGORY (TRANSACTIONAL) ---
+categories.delete('/:categoryId', isAuth, globalLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    const organizationId = req.organizationId;
+
+    if (!organizationId) {
+        return res.status(403).json({ message: 'Acceso denegado. No se identificó un Workspace válido.' });
+    }
+
     const client = await pool.connect();
     
     try {
         await client.query('BEGIN');
         const categoryId = Number(req.params.categoryId);
 
-        // 2. Desvincular assets (Paso previo necesario)
-        await client.query(`UPDATE assets SET category_id = NULL WHERE category_id = $1`, [categoryId]);
+        // 1. 🔒 Desvincular assets asegurando que pertenezcan a la misma organización del cliente
+        // Esto evita alterar records accidentales si hay colisión de IDs lógicos
+        await client.query(
+            `UPDATE assets SET category_id = NULL WHERE category_id = $1 AND organization_id = $2`, 
+            [categoryId, organizationId]
+        );
 
-        // 3. Eliminar la categoría y RETORNAR los datos antes de que se borren
-        // El truco está en el "RETURNING *"
-        const response = await client.query(`DELETE FROM categories WHERE id = $1 RETURNING *`, [categoryId]);
-        
+        // 2. 🔒 Eliminar la categoría controlando el Workspace boundary
+        const deleteQuery = `DELETE FROM categories WHERE id = $1 AND organization_id = $2 RETURNING *`;
+        const response = await client.query(deleteQuery, [categoryId, organizationId]);
         const categoryDeleted = response.rows[0];
 
         if (!categoryDeleted) {
             await client.query('ROLLBACK');
-            return res.status(404).json({ message: 'Category not found.' });
+            return res.status(404).json({ message: 'Category not found in this Workspace.' });
         }
 
-        // 4. Confirmar cambios
         await client.query('COMMIT');
 
         res.status(200).json({
             message: 'Category and associations cleared successfully',
-            data: categoryDeleted // ¡Ahora sí devuelves lo que borraste!
+            data: categoryDeleted 
         });
 
     } catch (err) {
@@ -120,4 +161,3 @@ categories.delete('/:categoryId', globalLimiter, async (req: Request, res: Respo
         client.release();
     }
 });
-
