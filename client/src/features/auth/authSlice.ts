@@ -8,13 +8,13 @@ interface OrganizationContext {
 }
 
 // 👤 Extendemos el usuario para incluir el rol y su organización
-interface User {
+export interface User {
     id: number;
     name: string;
     email: string;
-    role: string; // 'ADMIN' o 'USER'
-    avatar?: string;
-    organization: OrganizationContext | null; // 🧠 Guardamos el objeto completo o null si aplica
+    avatar?: string;     // 👈 Cambiado: al poner '?' es string | undefined automáticamente
+    role?: string; 
+    organization?: any; 
 }
 
 interface AuthState {
