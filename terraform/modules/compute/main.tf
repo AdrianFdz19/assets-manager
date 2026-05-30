@@ -134,17 +134,17 @@ resource "aws_ecs_task_definition" "app" {
         }
       ]
 
-      # 🚀 INYECCIÓN DE VARIABLES DE ENTORNO EN TIEMPO DE EJECUCIÓN
+      # 🚀 INYECCIÓN DE VARIABLES TOTALMENTE DINÁMICA
       environment = [
-        { name = "NODE_ENV", value = "production" },
+        { name = "NODE_ENV", value = var.environment }, # 👈 Dinámico: "development" o "production"
         { name = "PORT", value = tostring(var.container_port) },
-        { name = "DATABASE_USER", value = "postgres" },
-        { name = "DATABASE_NAME", value = "assetflow_dev_db" },
+        { name = "DATABASE_USER", value = var.database_user }, # 👈 Dinámico
+        { name = "DATABASE_NAME", value = var.database_name }, # 👈 Dinámico
         { name = "JWT_SECRET", value = var.jwt_secret },
         { name = "GOOGLE_CLIENT_ID", value = var.google_client_id },
-        { name = "CLIENT_URL", value = "https://feature-migration-to-aws.dw69k3m3yca8o.amplifyapp.com" },
+        { name = "CLIENT_URL", value = var.client_url }, # 👈 Dinámico: Mapea la URL de Netlify o Amplify correspondiente
 
-        # 🔗 Estas variables se alimentarán desde las variables de entrada de tu módulo
+        # 🔗 Variables de interconexión de recursos
         { name = "DATABASE_HOST", value = var.database_host },
         { name = "DATABASE_PASSWORD", value = var.database_password },
         { name = "AWS_S3_BUCKET_NAME", value = var.media_bucket_name }

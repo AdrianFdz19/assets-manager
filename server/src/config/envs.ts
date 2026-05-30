@@ -18,8 +18,3 @@ export const envs = {
 };
 
 console.log(envs.GOOGLE_CLIENT_ID);
-
-// Validación opcional (Muy pro para tu portafolio)
-if (!envs.DATABASE_HOST) {
-    throw new Error('DATABASE_URL is required in .env file');
-}

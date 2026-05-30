@@ -2,12 +2,13 @@ import { createEntityAdapter, createSelector } from "@reduxjs/toolkit";
 import { apiSlice } from "../api/apiSlice";
 import type { RootState } from "../../app/store";
 
-type User = {
+export type User = {
     id: number;
     name: string;
     email: string;
     role: string;
     avatar: string;
+    organization_id: number | null; // 🏢 Agregamos la llave foránea para saber a qué grupo pertenece cada quién
 };
 
 const usersAdapter = createEntityAdapter<User>();

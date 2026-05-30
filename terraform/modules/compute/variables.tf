@@ -1,16 +1,20 @@
+# modules/compute/variables.tf
+
 # ==========================================
 # ⚙️ VARIABLES CONTEXTUALES Y DE ENTORNO
 # ==========================================
-
 variable "environment" {
   type        = string
   description = "Nombre del ambiente (ej. development, production)"
 }
 
+variable "database_user" { type = string }
+variable "database_name" { type = string }
+variable "client_url"    { type = string }
+
 # ==========================================
 # 🌐 VARIABLES DE CONEXIÓN (INPUTS DESDE NETWORKING)
 # ==========================================
-
 variable "vpc_id" {
   type        = string
   description = "ID de la VPC donde se desplegará el clúster de cómputo"
@@ -29,37 +33,32 @@ variable "private_compute_subnet_ids" {
 # ==========================================
 # 🐳 VARIABLES DEL CONTENEDOR (BACKEND NODEJS)
 # ==========================================
-
 variable "container_image" {
   type        = string
-  description = "Ruta o URI de la imagen de Docker en AWS ECR (Elastic Container Registry) o Docker Hub"
+  description = "Ruta o URI de la imagen de Docker en AWS ECR"
 }
 
 variable "container_port" {
   type        = number
-  description = "Puerto en el que escucha tu servidor Express (ej. 3000 o 5000)"
+  description = "Puerto en el que escucha tu servidor Express"
   default     = 5000
 }
 
 # ==========================================
 # 🎛️ CAPACIDAD Y RENDIMIENTO DE FARGATE
 # ==========================================
-
 variable "fargate_cpu" {
   type        = string
-  description = "Cantidad de CPU para la tarea de Fargate (1024 = 1 vCPU)"
-  default     = "256" # Suficiente para el entorno de desarrollo
+  default     = "256"
 }
 
 variable "fargate_memory" {
   type        = string
-  description = "Cantidad de memoria RAM para la tarea de Fargate"
-  default     = "512" # 512 MB, ideal para desarrollo económico
+  default     = "512"
 }
 
 variable "desired_count" {
   type        = number
-  description = "Número de réplicas de contenedores corriendo simultáneamente"
   default     = 1
 }
 
@@ -79,11 +78,11 @@ variable "media_bucket_name" {
 }
 
 variable "jwt_secret" {
-  type = string
+  type      = string
   sensitive = true
 }
 
 variable "google_client_id" {
-  type = string 
+  type      = string 
   sensitive = true 
 }
