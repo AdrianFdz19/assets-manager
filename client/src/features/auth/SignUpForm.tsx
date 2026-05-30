@@ -3,11 +3,19 @@ import { Eye, EyeOff, User, Mail, Lock, Loader2 } from 'lucide-react';
 import { useSignUpMutation } from '../api/apiSlice';
 import { useNavigate } from 'react-router-dom';
 
+type FormDataType = {
+    name: string;
+    email: string;
+    organizationName: string;
+    password: string;
+}
+
 const SignUpForm = () => {
     const navigate = useNavigate();
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<FormDataType>({
         name: '',
         email: '',
+        organizationName: '',
         password: ''
     });
 
@@ -25,6 +33,7 @@ const SignUpForm = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            /* console.log(formData); */
             await signUp(formData).unwrap();
             navigate('/assets');
         } catch (err: any) {
@@ -51,7 +60,7 @@ const SignUpForm = () => {
                         type="text"
                         id="name"
                         name="name"
-                        placeholder="Ej. Adrian Fernandez"
+                        placeholder="Ej. Josh Mareek"
                         value={formData.name}
                         onChange={handleChange}
                         required
@@ -79,6 +88,32 @@ const SignUpForm = () => {
                         name="email"
                         placeholder="tu@email.com"
                         value={formData.email}
+                        onChange={handleChange}
+                        required
+                        disabled={isLoading}
+                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 focus:bg-white outline-none transition-all text-sm text-gray-700 placeholder:text-gray-400"
+                    />
+                </div>
+            </div>
+
+            {/* Campo Organización */}
+            <div className="flex flex-col gap-1.5 text-left">
+                <label 
+                    htmlFor="email" 
+                    className="text-[11px] font-black uppercase tracking-widest text-gray-400 ml-1"
+                >
+                    Nombre de la organización o espacio de trabajo
+                </label>
+                <div className="relative group">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors">
+                        <Mail size={18} />
+                    </div>
+                    <input
+                        type="text"
+                        id="organizationName"
+                        name="organizationName"
+                        placeholder="MyWorkSpace Inc"
+                        value={formData.organizationName}
                         onChange={handleChange}
                         required
                         disabled={isLoading}

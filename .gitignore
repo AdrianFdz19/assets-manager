@@ -8,6 +8,7 @@ credenciales.txt
 # Evitar subir archivos de estado locales (el tuyo ya está seguro en S3, pero por si acaso)
 *.tfstate
 *.tfstate.*
+*.tfvars
 
 # ¡CRUCIAL! Evitar subir archivos de variables que tengan contraseñas o llaves secretas
 *.tfvars
